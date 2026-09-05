@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import streamlit as st
 from docx import Document
@@ -7,7 +8,7 @@ from google.genai import types
 from pypdf import PdfReader
 
 # ---------------------------------------------------------
-# Page Configuration & Styling
+# Page Configuration & Clean Styling
 # ---------------------------------------------------------
 st.set_page_config(
     page_title="Resume ATS Analyzer",
@@ -28,15 +29,25 @@ st.markdown(
     }
     .score-badge {
         display: inline-block;
-        font-size: 2rem;
+        font-size: 2.1rem;
         font-weight: 700;
-        padding: 8px 22px;
+        padding: 8px 24px;
         border-radius: 9999px;
         margin-bottom: 12px;
     }
     .score-high { background-color: #dcfce7; color: #166534; }
     .score-mid { background-color: #fef9c3; color: #854d0e; }
     .score-low { background-color: #fee2e2; color: #991b1b; }
+    .skill-chip {
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: 6px;
+        margin: 3px;
+        font-size: 0.85rem;
+        font-weight: 500;
+    }
+    .skill-matched { background-color: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
+    .skill-missing { background-color: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -66,12 +77,12 @@ def extract_text_from_file(uploaded_file) -> str:
 def analyze_resume_with_gemini(
     resume_text: str, job_description: str, api_key: str
 ) -> dict:
-    """Evaluates ATS alignment and returns structured analysis using Gemini Flash."""
+    """Evaluates ATS alignment and separates hard vs. soft skills."""
     client = genai.Client(api_key=api_key)
 
     prompt = f"""
-    You are an expert ATS (Applicant Tracking System) reviewer and hiring manager.
-    Evaluate the candidate's resume strictly against the target job description.
+    You are an expert ATS (Applicant Tracking System) reviewer and corporate technical recruiter.
+    Evaluate the candidate resume strictly against the target job description.
 
     Resume:
     \"\"\"{resume_text}\"\"\"
@@ -81,16 +92,22 @@ def analyze_resume_with_gemini(
 
     Return ONLY a single valid JSON object strictly matching this schema:
     {{
-      "ats_score": <int 0-100>,
-      "match_summary": "<2-3 sentence overview of match strength>",
-      "matched_keywords": ["keyword1", "keyword2"],
-      "missing_keywords": ["keyword1", "keyword2"],
-      "strengths": ["strength1", "strength2"],
-      "improvements": ["improvement1", "improvement2"],
+      "ats_score": <int between 0 and 100>,
+      "match_summary": "<2-3 sentence overview of profile alignment>",
+      "hard_skills": {{
+        "matched": ["matched technical/hard skill 1", "tool 2"],
+        "missing": ["missing technical/hard skill 1", "framework 2"]
+      }},
+      "soft_skills": {{
+        "matched": ["matched soft skill/competency 1", "competency 2"],
+        "missing": ["missing soft skill/competency 1", "competency 2"]
+      }},
+      "strengths": ["Clear strength 1", "Clear strength 2"],
+      "improvements": ["Actionable improvement 1", "Improvement 2"],
       "reformatted_bullet_examples": [
         {{
-          "original": "original weak point",
-          "optimized": "high-impact bullet point with action verbs and metrics"
+          "original": "Weak original resume sentence/bullet",
+          "optimized": "High-impact, metric-driven ATS alternative with action verbs"
         }}
       ]
     }}
@@ -111,27 +128,42 @@ def analyze_resume_with_gemini(
     return json.loads(clean_json)
 
 
+def get_api_key() -> str:
+    """Fetches Gemini API key from Streamlit secrets or environment variables."""
+    if "GEMINI_API_KEY" in st.secrets:
+        return st.secrets["GEMINI_API_KEY"]
+    return os.getenv("GEMINI_API_KEY", "")
+
+
+# ---------------------------------------------------------
 # Sidebar
+# ---------------------------------------------------------
 with st.sidebar:
-    st.header("⚙️ Settings")
-    api_key_input = st.text_input(
-        "Gemini API Key",
-        type="password",
-        help="Obtain an API key from Google AI Studio",
-    )
-    st.markdown("---")
+    st.header("📌 About")
     st.markdown(
         """
-        **Workflow:**
-        1. Upload Resume (`.pdf` or `.docx`)
-        2. Paste Target Job Description
-        3. Run ATS Analysis
+        **ATS Resume Matcher**
+        
+        Compare your resume directly against target job postings using Google Gemini Flash.
+        
+        **How it works:**
+        1. 📄 Upload your resume (`.pdf` or `.docx`).
+        2. 📝 Paste the target job description.
+        3. 🚀 Click **Run ATS Analysis**.
         """
     )
+    st.markdown("---")
+    st.caption("🔒 Analysis is private and processed securely.")
 
+# ---------------------------------------------------------
 # Main UI
-st.title("📄 AI Resume & ATS Match Analyzer")
-st.caption("Powered by Google Gemini Flash & Streamlit")
+# ---------------------------------------------------------
+st.title("📄 AI Resume Analyzer")
+st.caption(
+    "Benchmark your resume against job specifications with categorized hard & soft skill tracking."
+)
+
+api_key = get_api_key()
 
 col_left, col_right = st.columns(2, gap="medium")
 
@@ -140,6 +172,7 @@ with col_left:
     uploaded_resume = st.file_uploader(
         "Upload PDF or Word Document",
         type=["pdf", "docx"],
+        help="Ensure text is selectable and not a scanned image.",
     )
 
 with col_right:
@@ -147,34 +180,37 @@ with col_right:
     job_description_input = st.text_area(
         "Paste Job Requirements & Responsibilities",
         height=210,
-        placeholder="Paste full job description here...",
+        placeholder="Paste full job posting or requirements here...",
     )
 
 if st.button("Run ATS Analysis", type="primary", use_container_width=True):
-    if not api_key_input:
-        st.error("Please enter your Gemini API key in the sidebar.")
+    if not api_key:
+        st.error(
+            "API key not found. Please configure `GEMINI_API_KEY` in Streamlit secrets (Settings > Secrets) or environment variables."
+        )
     elif not uploaded_resume:
         st.warning("Please upload a resume file.")
     elif not job_description_input.strip():
         st.warning("Please provide the job description.")
     else:
-        with st.spinner("Analyzing resume against job description..."):
+        with st.spinner("Analyzing resume against job specifications..."):
             try:
                 resume_text = extract_text_from_file(uploaded_resume)
                 if len(resume_text) < 40:
                     st.error(
-                        "Extracted text is too short. Please ensure the document contains readable text."
+                        "Extracted text is too short. Please ensure the document contains selectable text."
                     )
                 else:
                     results = analyze_resume_with_gemini(
                         resume_text=resume_text,
                         job_description=job_description_input,
-                        api_key=api_key_input,
+                        api_key=api_key,
                     )
 
                     st.markdown("---")
                     st.subheader("📊 Analysis Results")
 
+                    # Score Overview
                     score = int(results.get("ats_score", 0))
                     badge_class = (
                         "score-high"
@@ -191,46 +227,108 @@ if st.button("Run ATS Analysis", type="primary", use_container_width=True):
                         st.progress(score / 100)
                     with sm_col:
                         st.markdown(
-                            f"**Overview:** {results.get('match_summary', '')}"
+                            f"**Match Overview:** {results.get('match_summary', '')}"
                         )
 
                     st.markdown("---")
 
-                    kw1, kw2 = st.columns(2, gap="medium")
-                    with kw1:
-                        st.markdown("### ✅ Matched Keywords")
-                        matched = results.get("matched_keywords", [])
-                        st.write(
-                            ", ".join([f"`{k}`" for k in matched])
-                            if matched
-                            else "None detected."
-                        )
+                    # Hard Skills vs Soft Skills Breakdown
+                    st.markdown("### 🔍 Skills Parity Breakdown")
+                    tab_hard, tab_soft = st.tabs(
+                        [
+                            "💻 Technical & Hard Skills",
+                            "🤝 Soft Skills & Core Competencies",
+                        ]
+                    )
 
-                    with kw2:
-                        st.markdown("### ⚠️ Missing Keywords & Skills")
-                        missing = results.get("missing_keywords", [])
-                        st.write(
-                            ", ".join([f"`{k}`" for k in missing])
-                            if missing
-                            else "None missing."
-                        )
+                    with tab_hard:
+                        hard_data = results.get("hard_skills", {})
+                        col_h1, col_h2 = st.columns(2, gap="medium")
+                        with col_h1:
+                            st.markdown("#### ✅ Matched Hard Skills")
+                            h_matched = hard_data.get("matched", [])
+                            if h_matched:
+                                html_chips = "".join(
+                                    [
+                                        f'<span class="skill-chip skill-matched">{k}</span>'
+                                        for k in h_matched
+                                    ]
+                                )
+                                st.markdown(
+                                    html_chips, unsafe_allow_html=True
+                                )
+                            else:
+                                st.caption(
+                                    "No matching technical skills identified."
+                                )
+                        with col_h2:
+                            st.markdown("#### ⚠️ Missing Hard Skills")
+                            h_missing = hard_data.get("missing", [])
+                            if h_missing:
+                                html_chips = "".join(
+                                    [
+                                        f'<span class="skill-chip skill-missing">{k}</span>'
+                                        for k in h_missing
+                                    ]
+                                )
+                                st.markdown(
+                                    html_chips, unsafe_allow_html=True
+                                )
+                            else:
+                                st.caption("No critical hard skills missing.")
+
+                    with tab_soft:
+                        soft_data = results.get("soft_skills", {})
+                        col_s1, col_s2 = st.columns(2, gap="medium")
+                        with col_s1:
+                            st.markdown("#### ✅ Matched Soft Skills")
+                            s_matched = soft_data.get("matched", [])
+                            if s_matched:
+                                html_chips = "".join(
+                                    [
+                                        f'<span class="skill-chip skill-matched">{k}</span>'
+                                        for k in s_matched
+                                    ]
+                                )
+                                st.markdown(
+                                    html_chips, unsafe_allow_html=True
+                                )
+                            else:
+                                st.caption("No matching soft skills identified.")
+                        with col_s2:
+                            st.markdown("#### ⚠️ Missing Soft Skills")
+                            s_missing = soft_data.get("missing", [])
+                            if s_missing:
+                                html_chips = "".join(
+                                    [
+                                        f'<span class="skill-chip skill-missing">{k}</span>'
+                                        for k in s_missing
+                                    ]
+                                )
+                                st.markdown(
+                                    html_chips, unsafe_allow_html=True
+                                )
+                            else:
+                                st.caption("No critical soft skills missing.")
 
                     st.markdown("---")
 
+                    # Strengths and Improvements
                     c1, c2 = st.columns(2, gap="medium")
                     with c1:
                         st.markdown("### 🌟 Profile Strengths")
                         for s in results.get("strengths", []):
                             st.markdown(f"- {s}")
                     with c2:
-                        st.markdown("### 🛠️ Key Improvements Needed")
+                        st.markdown("### 🛠️ Actionable Improvements")
                         for imp in results.get("improvements", []):
                             st.markdown(f"- {imp}")
 
+                    # Optimized Bullets
                     rewrites = results.get("reformatted_bullet_examples", [])
                     if rewrites:
                         st.markdown("---")
-                        st.markdown("### ✍️ Optimized Bullet Examples")
+                        st.markdown("### ✍️ Impact-Driven Bullet Rewrites")
                         for idx, item in enumerate(rewrites, 1):
                             with st.expander(
                                 f"Optimization {idx}", expanded=True
