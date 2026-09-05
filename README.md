@@ -25,7 +25,7 @@ An intelligent, clean, and intuitive web application built with **Streamlit** an
 
 ### 1. Clone the Repository
 
-git clone https://github.com/your-username/resume-ats-analyzer.git
+git clone (https://github.com/Kamran-31/AI-Resume-Analyzer/).git
 cd resume-ats-analyzer
 
 ### 2. Set Up Virtual Environment
