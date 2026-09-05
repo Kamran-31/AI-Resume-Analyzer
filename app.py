@@ -74,10 +74,10 @@ def analyze_resume_with_gemini(
     Evaluate the candidate's resume strictly against the target job description.
 
     Resume:
-    """{resume_text}"""
+    \"\"\"{resume_text}\"\"\"
 
     Job Description:
-    """{job_description}"""
+    \"\"\"{job_description}\"\"\"
 
     Return ONLY a single valid JSON object strictly matching this schema:
     {{
@@ -105,7 +105,9 @@ def analyze_resume_with_gemini(
         ),
     )
 
-    clean_json = re.sub(r"^```json\s*|\s*```$", "", response.text.strip(), flags=re.MULTILINE)
+    clean_json = re.sub(
+        r"^```json\s*|\s*```$", "", response.text.strip(), flags=re.MULTILINE
+    )
     return json.loads(clean_json)
 
 
@@ -160,7 +162,9 @@ if st.button("Run ATS Analysis", type="primary", use_container_width=True):
             try:
                 resume_text = extract_text_from_file(uploaded_resume)
                 if len(resume_text) < 40:
-                    st.error("Extracted text is too short. Please ensure the document contains readable text.")
+                    st.error(
+                        "Extracted text is too short. Please ensure the document contains readable text."
+                    )
                 else:
                     results = analyze_resume_with_gemini(
                         resume_text=resume_text,
@@ -172,7 +176,11 @@ if st.button("Run ATS Analysis", type="primary", use_container_width=True):
                     st.subheader("📊 Analysis Results")
 
                     score = int(results.get("ats_score", 0))
-                    badge_class = "score-high" if score >= 75 else "score-mid" if score >= 50 else "score-low"
+                    badge_class = (
+                        "score-high"
+                        if score >= 75
+                        else "score-mid" if score >= 50 else "score-low"
+                    )
 
                     sc_col, sm_col = st.columns([1, 2], gap="medium")
                     with sc_col:
@@ -182,7 +190,9 @@ if st.button("Run ATS Analysis", type="primary", use_container_width=True):
                         )
                         st.progress(score / 100)
                     with sm_col:
-                        st.markdown(f"**Overview:** {results.get('match_summary', '')}")
+                        st.markdown(
+                            f"**Overview:** {results.get('match_summary', '')}"
+                        )
 
                     st.markdown("---")
 
@@ -190,12 +200,20 @@ if st.button("Run ATS Analysis", type="primary", use_container_width=True):
                     with kw1:
                         st.markdown("### ✅ Matched Keywords")
                         matched = results.get("matched_keywords", [])
-                        st.write(", ".join([f"`{k}`" for k in matched]) if matched else "None detected.")
+                        st.write(
+                            ", ".join([f"`{k}`" for k in matched])
+                            if matched
+                            else "None detected."
+                        )
 
                     with kw2:
                         st.markdown("### ⚠️ Missing Keywords & Skills")
                         missing = results.get("missing_keywords", [])
-                        st.write(", ".join([f"`{k}`" for k in missing]) if missing else "None missing.")
+                        st.write(
+                            ", ".join([f"`{k}`" for k in missing])
+                            if missing
+                            else "None missing."
+                        )
 
                     st.markdown("---")
 
@@ -214,9 +232,15 @@ if st.button("Run ATS Analysis", type="primary", use_container_width=True):
                         st.markdown("---")
                         st.markdown("### ✍️ Optimized Bullet Examples")
                         for idx, item in enumerate(rewrites, 1):
-                            with st.expander(f"Optimization {idx}", expanded=True):
-                                st.markdown(f"**Original:** {item.get('original', '')}")
-                                st.markdown(f"**ATS-Optimized:** {item.get('optimized', '')}")
+                            with st.expander(
+                                f"Optimization {idx}", expanded=True
+                            ):
+                                st.markdown(
+                                    f"**Original:** {item.get('original', '')}"
+                                )
+                                st.markdown(
+                                    f"**ATS-Optimized:** {item.get('optimized', '')}"
+                                )
 
             except Exception as e:
                 st.error(f"Error occurred during analysis: {e}")
